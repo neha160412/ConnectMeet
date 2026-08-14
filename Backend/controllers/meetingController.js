@@ -121,19 +121,20 @@ exports.getMyMeetings = async (req, res) => {
 
 };
 
+
 // ================= Meeting Details =================
 
 exports.getMeetingDetails = async (req, res) => {
-
     try {
 
         const { meetingId } = req.params;
 
-        const meetings = await Meeting.find({
-    host: req.user.id
-})
-.populate("host", "fullName email")
-.populate("participants", "fullName email");
+        const meeting = await Meeting.findOne({
+            _id: meetingId,
+            host: req.user.id
+        })
+        .populate("host", "fullName email")
+        .populate("participants", "fullName email");
 
         if (!meeting) {
             return res.status(404).json({
@@ -157,7 +158,6 @@ exports.getMeetingDetails = async (req, res) => {
         });
 
     }
-
 };
 
 // ================= Update Meeting =================

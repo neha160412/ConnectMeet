@@ -20,7 +20,9 @@ import {
   CallEnd,
 } from "@mui/icons-material";
 
-const SOCKET_URL = "http://localhost:5000";
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  "http://localhost:5000";
 
 export default function MeetingRoom() {
   const { meetingCode } = useParams();

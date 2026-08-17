@@ -1,4 +1,5 @@
 import { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   TextField,
   Button,
@@ -16,35 +17,42 @@ export default function JoinMeeting() {
 
   const { token } = useContext(AuthContext);
 
+  const navigate = useNavigate();
+
   const [meetingCode, setMeetingCode] = useState("");
 
-  const handleSubmit = async () => {
+ const handleSubmit = async () => {
 
-    if (!meetingCode.trim()) {
-      toast.error("Please enter a meeting code");
-      return;
-    }
+  if (!meetingCode.trim()) {
+    toast.error("Please enter a meeting code");
+    return;
+  }
 
-    try {
+  try {
 
-      const res = await joinMeeting(
-        { meetingCode },
-        token
-      );
+    const res = await joinMeeting(
+      { meetingCode: meetingCode.trim().toUpperCase() },
+      token
+    );
 
-      toast.success(res.message);
+    toast.success(res.message || "Joined meeting successfully!");
 
-      setMeetingCode("");
+    setMeetingCode("");
 
-    } catch (error) {
+    // Open the meeting room
+    navigate(`/meeting-room/${meetingCode.trim().toUpperCase()}`);
 
-      toast.error(
-        error.response?.data?.message || "Something went wrong"
-      );
+  } catch (error) {
 
-    }
+    console.error("Join meeting error:", error);
 
-  };
+    toast.error(
+      error.response?.data?.message ||
+      "Unable to join meeting"
+    );
+
+  }
+};
 
   return (
     <>

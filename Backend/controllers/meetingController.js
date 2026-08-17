@@ -1,7 +1,8 @@
 const Meeting = require("../models/meeting");
 
-exports.createMeeting = async (req, res) => {
+// ================= CREATE MEETING =================
 
+exports.createMeeting = async (req, res) => {
     try {
 
         const { meetingTitle } = req.body;
@@ -14,7 +15,12 @@ exports.createMeeting = async (req, res) => {
         }
 
         // Generate a random meeting code
-        const meetingCode = "CM-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const meetingCode =
+            "CM-" +
+            Math.random()
+                .toString(36)
+                .substring(2, 8)
+                .toUpperCase();
 
         // Create meeting
         const meeting = await Meeting.create({
@@ -39,11 +45,12 @@ exports.createMeeting = async (req, res) => {
         });
 
     }
-
 };
 
-exports.joinMeeting = async (req, res) => {
 
+// ================= JOIN MEETING =================
+
+exports.joinMeeting = async (req, res) => {
     try {
 
         const { meetingCode } = req.body;
@@ -55,7 +62,9 @@ exports.joinMeeting = async (req, res) => {
             });
         }
 
-        const meeting = await Meeting.findOne({ meetingCode });
+        const meeting = await Meeting.findOne({
+            meetingCode: meetingCode.trim().toUpperCase()
+        });
 
         if (!meeting) {
             return res.status(404).json({
@@ -64,22 +73,39 @@ exports.joinMeeting = async (req, res) => {
             });
         }
 
-        const alreadyJoined = meeting.participants.some(
-            participant => participant.toString() === req.user.id
-        );
-
-        if (!alreadyJoined) {
-            meeting.participants.push(req.user.id);
-            await meeting.save();
+        // Host cannot join their own meeting as participant
+        if (meeting.host.toString() === req.user.id) {
+            return res.status(200).json({
+                success: true,
+                message: "You are the host of this meeting",
+                meeting
+            });
         }
 
+        // Check whether user already joined
+        const alreadyJoined = meeting.participants.some(
+            participant =>
+                participant.toString() === req.user.id
+        );
+
         if (alreadyJoined) {
-  return res.status(200).json({
-    success: true,
-    message: "Already joined this meeting",
-    meeting,
-  });
-}
+            return res.status(200).json({
+                success: true,
+                message: "Already joined this meeting",
+                meeting
+            });
+        }
+
+        // Add user as participant
+        meeting.participants.push(req.user.id);
+
+        await meeting.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Joined meeting successfully",
+            meeting
+        });
 
     } catch (error) {
 
@@ -91,16 +117,30 @@ exports.joinMeeting = async (req, res) => {
         });
 
     }
-
 };
 
-exports.getMyMeetings = async (req, res) => {
 
+// ================= MY MEETINGS =================
+
+exports.getMyMeetings = async (req, res) => {
     try {
 
+        /*
+          Return meetings where the logged-in user is:
+
+          1. Host
+          OR
+          2. Participant
+        */
+
         const meetings = await Meeting.find({
-            host: req.user.id
-        }).populate("host", "fullName email");
+            $or: [
+                { host: req.user.id },
+                { participants: req.user.id }
+            ]
+        })
+            .populate("host", "fullName email")
+            .populate("participants", "fullName email");
 
         return res.status(200).json({
             success: true,
@@ -118,23 +158,19 @@ exports.getMyMeetings = async (req, res) => {
         });
 
     }
-
 };
 
 
-// ================= Meeting Details =================
+// ================= MEETING DETAILS =================
 
 exports.getMeetingDetails = async (req, res) => {
     try {
 
         const { meetingId } = req.params;
 
-        const meeting = await Meeting.findOne({
-            _id: meetingId,
-            host: req.user.id
-        })
-        .populate("host", "fullName email")
-        .populate("participants", "fullName email");
+        const meeting = await Meeting.findById(meetingId)
+            .populate("host", "fullName email")
+            .populate("participants", "fullName email");
 
         if (!meeting) {
             return res.status(404).json({
@@ -160,10 +196,10 @@ exports.getMeetingDetails = async (req, res) => {
     }
 };
 
-// ================= Update Meeting =================
+
+// ================= UPDATE MEETING =================
 
 exports.updateMeeting = async (req, res) => {
-
     try {
 
         const { meetingId } = req.params;
@@ -186,8 +222,13 @@ exports.updateMeeting = async (req, res) => {
             });
         }
 
-        if (meetingTitle) meeting.meetingTitle = meetingTitle;
-        if (status) meeting.status = status;
+        if (meetingTitle) {
+            meeting.meetingTitle = meetingTitle;
+        }
+
+        if (status) {
+            meeting.status = status;
+        }
 
         await meeting.save();
 
@@ -207,11 +248,12 @@ exports.updateMeeting = async (req, res) => {
         });
 
     }
-
 };
 
-exports.deleteMeeting = async (req, res) => {
 
+// ================= DELETE MEETING =================
+
+exports.deleteMeeting = async (req, res) => {
     try {
 
         const { meetingId } = req.params;
@@ -225,6 +267,7 @@ exports.deleteMeeting = async (req, res) => {
             });
         }
 
+        // Only host can delete
         if (meeting.host.toString() !== req.user.id) {
             return res.status(403).json({
                 success: false,
@@ -249,66 +292,86 @@ exports.deleteMeeting = async (req, res) => {
         });
 
     }
-
 };
+
+
+// ================= LEAVE MEETING =================
 
 exports.leaveMeeting = async (req, res) => {
-  try {
-    const meeting = await Meeting.findById(req.params.id);
+    try {
 
-    if (!meeting) {
-      return res.status(404).json({
-        success: false,
-        message: "Meeting not found",
-      });
+        const meeting = await Meeting.findById(req.params.id);
+
+        if (!meeting) {
+            return res.status(404).json({
+                success: false,
+                message: "Meeting not found"
+            });
+        }
+
+        // Host cannot leave their own meeting
+        if (meeting.host.toString() === req.user.id) {
+            return res.status(403).json({
+                success: false,
+                message: "Host cannot leave the meeting"
+            });
+        }
+
+        meeting.participants = meeting.participants.filter(
+            participant =>
+                participant.toString() !== req.user.id
+        );
+
+        await meeting.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Left meeting successfully"
+        });
+
+    } catch (error) {
+
+        console.log(error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
+
     }
-
-    meeting.participants = meeting.participants.filter(
-      (participant) => participant.toString() !== req.user.id
-    );
-
-    await meeting.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Left meeting successfully",
-    });
-  } catch (error) {
-    console.log(error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
 };
 
+
+// ================= SEARCH MEETINGS =================
+
 exports.searchMeetings = async (req, res) => {
-  try {
+    try {
 
-    const { title = "" } = req.query;
+        const { title = "" } = req.query;
 
-    const meetings = await Meeting.find({
-  meetingTitle: {
-    $regex: title,
-    $options: "i",
-  },
-});
+        const meetings = await Meeting.find({
+            meetingTitle: {
+                $regex: title,
+                $options: "i"
+            }
+        })
+            .populate("host", "fullName email")
+            .populate("participants", "fullName email");
 
-    return res.status(200).json({
-      success: true,
-      total: meetings.length,
-      meetings
-    });
+        return res.status(200).json({
+            success: true,
+            total: meetings.length,
+            meetings
+        });
 
-  } catch (error) {
+    } catch (error) {
 
-    console.log(error);
+        console.log(error);
 
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error"
-    });
+        return res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        });
 
-  }
+    }
 };
